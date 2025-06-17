@@ -8,13 +8,13 @@
 #define FPS					60
 
 #define SHIP_RADIUS			30
-#define MAX_SPEED			4
+#define MAX_SPEED			5
 #define MIN_SPEED			0
 #define SPEED_ACCEL			0.1f
 #define ROTATION_SPEED		6
 
 #define MAX_BULLETS			30
-#define BULLET_VELOCITY		5
+#define BULLET_VELOCITY		10
 #define BULLET_RADIUS		5
 
 #define MAX_ASTEROIDS		10

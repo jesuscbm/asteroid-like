@@ -36,6 +36,7 @@ typedef struct Bullet {
 } Bullet;
 
 typedef struct {
+	int width, height;
 	Player* player;
 	Asteroid* asteroids;
 	int n_asteroids;
@@ -58,6 +59,8 @@ bool game_update_frame(Game* game);
  * Makes the player shoot a bullet.
  */
 bool game_shoot(Game* game);
+
+void game_resize(Game* game);
 
 void game_free(Game* game);
 

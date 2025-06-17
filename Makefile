@@ -1,4 +1,4 @@
-LD_FLAGS=-lSDL3
+LD_FLAGS=-lSDL3 -lSDL3_image -lSDL3_ttf
 INCLUDE_DIR=./src/
 SRC_DIR=./src/
 OBJ_DIR=.

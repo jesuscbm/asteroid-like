@@ -1,5 +1,4 @@
 #include "game.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -9,7 +8,9 @@
 
 #include "config.h"
 
-void update_player_position(Player *player);
+#define GRACE_SPACING 5
+
+void update_player_position(Game *game);
 
 /**
  * Bullets HAVE TO GO before asteroids.
@@ -37,6 +38,8 @@ bool game_init(Game **game)
 		return false;
 	}
 
+	(*game)->width = WIDTH;
+	(*game)->height = HEIGHT;
 	(*game)->state = MENU;
 	(*game)->player = NULL;
 	(*game)->asteroids = malloc(MAX_ASTEROIDS * sizeof(Asteroid));
@@ -90,7 +93,7 @@ bool game_update_frame(Game *game)
 		create_asteroids(game);
 	}
 
-	update_player_position(player);
+	update_player_position(game);
 	update_bullets_position(game);
 	update_asteroids_position(game);
 	handle_collisions(game);
@@ -116,13 +119,46 @@ bool game_shoot(Game *game)
 	return true;
 }
 
+void game_resize(Game *game)
+{
+	// We have to make sure this resize doesn't cause problems
+	Player *player = game->player;
+	if (player->x >= game->width - SHIP_RADIUS) {
+		player->x = game->width - SHIP_RADIUS - GRACE_SPACING;
+	}
+	if (player->x <= SHIP_RADIUS) {
+		player->x = SHIP_RADIUS + GRACE_SPACING;
+	}
+	if (player->y >= game->height - SHIP_RADIUS) {
+		player->y = game->height - SHIP_RADIUS - GRACE_SPACING;
+	}
+	if (player->y <= SHIP_RADIUS) {
+		player->y = SHIP_RADIUS + GRACE_SPACING;
+	}
+	for (int i = 0; i < game->n_asteroids; i++) {
+		Asteroid *asteroid = &game->asteroids[i];
+		if (asteroid->x >= game->width - asteroid->radius) {
+			asteroid->x = game->width - asteroid->radius - GRACE_SPACING;
+		}
+		if (asteroid->x <= asteroid->radius) {
+			asteroid->x = asteroid->radius + GRACE_SPACING;
+		}
+		if (asteroid->y >= game->height - asteroid->radius) {
+			asteroid->y = game->height - asteroid->radius - GRACE_SPACING;
+		}
+		if (asteroid->y <= asteroid->radius) {
+			asteroid->y = asteroid->radius + GRACE_SPACING;
+		}
+	}
+}
+
 void game_reset(Game *game)
 {
 	game->n_asteroids = 0;
 	game->n_bullets = 0;
 	game->level = 0;
-	game->player->x = (float)WIDTH / 2;
-	game->player->y = (float)HEIGHT / 2;
+	game->player->x = (float)game->width / 2;
+	game->player->y = (float)game->height / 2;
 	game->player->direction = 0;
 	game->player->direction_state = STILL;
 	game->player->velocity = 0;
@@ -142,8 +178,9 @@ void game_free(Game *game)
 	free(game);
 }
 
-void update_player_position(Player *player)
+void update_player_position(Game *game)
 {
+	Player *player = game->player;
 	if (player->direction_state == CLOCKWISE) {
 		player->direction = (player->direction + ROTATION_SPEED) % 360;
 	} else if (player->direction_state == COUNTER_CLOCKWISE) {
@@ -163,10 +200,10 @@ void update_player_position(Player *player)
 	}
 	float x_change = SDL_sin(player->direction * SDL_PI_D / 180.0) * player->velocity;
 	float y_change = -SDL_cos(player->direction * SDL_PI_D / 180.0) * player->velocity;
-	if (player->x + x_change >= 0 && player->x + x_change <= WIDTH) {
+	if (player->x + x_change >= 0 && player->x + x_change <= game->width) {
 		player->x += x_change;
 	}
-	if (player->y + y_change >= 0 && player->y + y_change <= HEIGHT) {
+	if (player->y + y_change >= 0 && player->y + y_change <= game->height) {
 		player->y += y_change;
 	}
 }
@@ -177,7 +214,8 @@ void update_bullets_position(Game *game)
 		Bullet *bullet = &game->bullets[i];
 		bullet->x += bullet->dx;
 		bullet->y += bullet->dy;
-		if (bullet->x >= WIDTH || bullet->x <= 0 || bullet->y >= HEIGHT || bullet->y <= 0) {
+		if (bullet->x >= game->width || bullet->x <= 0 || bullet->y >= game->height
+			|| bullet->y <= 0) {
 			game->bullets[i] = game->bullets[--game->n_bullets];
 			i--;
 		}
@@ -190,19 +228,34 @@ void update_asteroids_position(Game *game)
 		Asteroid *asteroid = &game->asteroids[i];
 		asteroid->x += asteroid->dx;
 		asteroid->y += asteroid->dy;
-		if (asteroid->x >= WIDTH - asteroid->radius || asteroid->x <= asteroid->radius)
+		if (asteroid->x >= game->width - asteroid->radius) {
 			asteroid->dx = -asteroid->dx;
-		if (asteroid->y >= HEIGHT - asteroid->radius || asteroid->y <= asteroid->radius)
-			asteroid->dy = -asteroid->dy;
+			asteroid->x = game->width - asteroid->radius - GRACE_SPACING;
+		}
+		if (asteroid->x <= asteroid->radius) {
+			asteroid->dx = -asteroid->dx;
+            asteroid->x = asteroid->radius + GRACE_SPACING;
+
+		}
+        if (asteroid->y >= game->height - asteroid->radius) {
+            asteroid->dy = -asteroid->dy;
+            asteroid->y = game->height - asteroid->radius - GRACE_SPACING;
+        }
+        if (asteroid->y <= asteroid->radius) {
+            asteroid->dy = -asteroid->dy;
+            asteroid->y = asteroid->radius + GRACE_SPACING;
+        }
 	}
 }
 
 void handle_collisions(Game *game)
 {
-	/* Colissions. TODO: Consider dividing the list in bins for better performance
+	/* Collisions. TODO: Consider dividing the list in bins for better performance
 	 * Consider quad trees
 	 * Damn collisions are hard
 	 */
+
+	// Asteroid-Player and Bullet-Asteroid collisions
 	for (int i = 0; i < game->n_asteroids; i++) {
 		Asteroid *asteroid = &game->asteroids[i];
 		float dx = game->player->x - asteroid->x;
@@ -226,21 +279,52 @@ void handle_collisions(Game *game)
 				j--;
 			}
 		}
-		for (int j = 0; j < game->n_asteroids; j++) {
-			if (i == j) {
-				continue;
-			}
-			Asteroid *other = &game->asteroids[j];
-			float dx = other->x - asteroid->x;
-			float dy = other->y - asteroid->y;
+	}
+
+	// Asteroid-Asteroid collisions
+	for (int i = 0; i < game->n_asteroids; i++) {
+		Asteroid *a1 = &game->asteroids[i];
+		for (int j = i + 1; j < game->n_asteroids; j++) {
+			Asteroid *a2 = &game->asteroids[j];
+
+			float dx = a2->x - a1->x;  // (dx, dy) is the collision vector
+			float dy = a2->y - a1->y;
 			float dist_sq = dx * dx + dy * dy;
-			float radius_sum = asteroid->radius + other->radius;
-			if (dist_sq <= radius_sum * radius_sum) {
-				Asteroid *smaller = (other->radius < asteroid->radius) ? other : asteroid;
-				smaller->dx = -smaller->dx;
-                smaller->dy = -smaller->dy;
-				smaller->x += smaller->dx;
-				smaller->y += smaller->dy;
+			float radius_sum = a1->radius + a2->radius;
+
+			if (dist_sq < radius_sum * radius_sum) {
+				// collision <=> module of difference less than sum of radii
+				float dist = SDL_sqrtf(dist_sq);
+				if (dist == 0.0f)
+					continue;  // avoid division by zero
+
+				// Normalize it
+				float nx = dx / dist;
+				float ny = dy / dist;
+
+				// Push them apart in the opposite direction that they are colliding in
+				float overlap = 0.6f * (radius_sum - dist + 1.0f);
+				a1->x -= nx * overlap;
+				a1->y -= ny * overlap;
+				a2->x += nx * overlap;
+				a2->y += ny * overlap;
+
+				// (dvx, dvy) is the relative velocity
+				float dvx = a2->dx - a1->dx;
+				float dvy = a2->dy - a1->dy;
+
+				// Impact speed is the projection of the relative velocity on the collision vectors'
+				// direction
+				float impact_speed = dvx * nx + dvy * ny;
+				if (impact_speed > 0)
+					continue;
+
+				// Now that we have the speed impulse (impulse = speed because they are perfectly
+				// elastic), we apply it to the asteroids
+				a1->dx += nx * impact_speed;
+				a1->dy += ny * impact_speed;
+				a2->dx -= nx * impact_speed;
+				a2->dy -= ny * impact_speed;
 			}
 		}
 	}
@@ -254,24 +338,23 @@ void create_asteroids(Game *game)
 		asteroid->radius
 		  = rand() % (ASTEROID_RADIUS_MAX - ASTEROID_RADIUS_MIN + 1) + ASTEROID_RADIUS_MIN;
 		enum { TOP, RIGHT, BOTTOM, LEFT };
-#define GRACE_SPACING 5
 		int side = rand() % 4;
 		switch (side) {
 		case TOP:
-			asteroid->x = rand() % (int)(WIDTH - 2 * asteroid->radius) + asteroid->radius;
+			asteroid->x = rand() % (int)(game->width) + asteroid->radius;
 			asteroid->y = asteroid->radius + GRACE_SPACING;
 			break;
 		case RIGHT:
-			asteroid->x = WIDTH - asteroid->radius - GRACE_SPACING;
-			asteroid->y = rand() % (int)(HEIGHT - 2 * asteroid->radius) + asteroid->radius;
+			asteroid->x = game->width - asteroid->radius - GRACE_SPACING;
+			asteroid->y = rand() % (int)(game->height - 2 * asteroid->radius) + asteroid->radius;
 			break;
 		case BOTTOM:
-			asteroid->x = rand() % (int)(WIDTH - 2 * asteroid->radius) + asteroid->radius;
-			asteroid->y = HEIGHT - asteroid->radius - GRACE_SPACING;
+			asteroid->x = rand() % (int)(game->width - 2 * asteroid->radius) + asteroid->radius;
+			asteroid->y = game->height - asteroid->radius - GRACE_SPACING;
 			break;
 		case LEFT:
 			asteroid->x = asteroid->radius + GRACE_SPACING;
-			asteroid->y = rand() % (int)(HEIGHT - 2 * asteroid->radius) + asteroid->radius;
+			asteroid->y = rand() % (int)(game->height - 2 * asteroid->radius) + asteroid->radius;
 			break;
 		}
 		asteroid->dx = rand() % (ASTEROID_SPEED_MAX - ASTEROID_SPEED_MIN + 1) + ASTEROID_SPEED_MIN;

@@ -23,9 +23,8 @@ is necessary for the changes to take effect.
 
 ## TODO
 
-- Start and Game Over screens
-- Fix collisions
+- Document
 - Split asteroids
 - Add sound
 - Other TODOs scattered around the code
-- SDL3_gfx?
+- SDL3_image

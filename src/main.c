@@ -4,11 +4,18 @@
  * @author Jesús Blázquez
  */
 #include <SDL3/SDL.h>
+#include <stdio.h>
 #include <time.h>
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_render.h>
+#include <SDL3/SDL_surface.h>
+#include <SDL3/SDL_video.h>
+#include <SDL3_image/SDL_image.h>  // TODO: Use SDL3_image
+#include <SDL3_ttf/SDL_ttf.h>
 
 #define SDL_MAIN_USE_CALLBACKS 1 /* No need for main() */
 #include <SDL3/SDL_main.h>
@@ -20,8 +27,8 @@ void update_player_vertices(Game* game);
 void drawcircle(SDL_Renderer* renderer, int x0, int y0, int radius);
 
 const int frameDelay = 1000 / FPS;	// ms per frame
-Uint64 frame_start = 0;
-int frame_time = 0;
+Uint64 frame_start = 0;				// ms at start of frame
+int frame_time = 0;					// ms elapsed this frame
 
 /**
  * @brief Window for the application
@@ -38,9 +45,18 @@ static SDL_Renderer* renderer;
  */
 static SDL_AudioStream* stream = NULL;
 
-void showMenu();
+// TODO: New file for font-related stuff?
+static struct {
+	enum { NOTHING, LEVEL, LOAD_MENU, LOAD_GAME_OVER } state;
+	TTF_Font* font;
+	SDL_Texture* texture1;
+	SDL_Texture* texture2;
+	SDL_FRect rect1, rect2;
+} text_info = { NOTHING, NULL, NULL };
 
-void showGameOver();
+void showMenu(Game* game);
+void showGameOver(Game* game);
+void showScoreboard(Game* game);
 
 /**
  * @brief Initializes the application. Called once
@@ -49,7 +65,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 {
 	SDL_AudioSpec spec;
 	Game* game;
-	if (!SDL_SetAppMetadata("Sorting Visualizer", "0.1", "org.sort")) {
+	if (!SDL_SetAppMetadata("Asteroids Clone", "0.1", "org.asteroids")) {
 		SDL_Log("Unable to set app metadata: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
@@ -57,13 +73,25 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 		SDL_Log("Unable to initialize SDL: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
-	SDL_CreateWindowAndRenderer("Sorting Visualizer", WIDTH, HEIGHT, 0, &window, &renderer);
+	SDL_CreateWindowAndRenderer("Asteroids Game", WIDTH, HEIGHT, 0, &window, &renderer);
 	if (!window) {
 		SDL_Log("Unable to create window: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
 	if (!renderer) {
 		SDL_Log("Unable to create renderer: %s\n", SDL_GetError());
+		return SDL_APP_FAILURE;
+	}
+
+	/* TTF */
+	if (!TTF_Init()) {
+		SDL_Log("Couldn't initialise SDL_ttf: %s\n", SDL_GetError());
+		return SDL_APP_FAILURE;
+	}
+
+	text_info.font = TTF_OpenFont("./font/AzeretMono.ttf", 50);
+	if (!text_info.font) {
+		SDL_Log("Couldn't load font: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
 
@@ -96,6 +124,13 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
 	Game* game = appstate;
 	Player* player = game->player;
+	if (event->type == SDL_EVENT_WINDOW_RESIZED) {
+		SDL_GetWindowSize(window, &game->width, &game->height);
+		SDL_SetRenderViewport(renderer, NULL);
+		game_resize(game);
+		return SDL_APP_CONTINUE;
+	}
+
 	if (event->type == SDL_EVENT_QUIT)
 		return SDL_APP_SUCCESS;
 
@@ -172,6 +207,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 {
 	Game* game = appstate;
 	Player* player = game->player;
+
 	SDL_SetRenderDrawColorFloat(renderer, BG_COLOR, 1.0f);
 	SDL_RenderClear(renderer);
 
@@ -180,13 +216,13 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	SDL_SetRenderDrawColorFloat(renderer, LINE_COLOR, 1.0f);
 	/* Menu */
 	if (game->state == MENU) {
-		showMenu();
+		showMenu(game);
 		SDL_RenderPresent(renderer);
 		return SDL_APP_CONTINUE;
 	}
 
 	if (game->state == GAME_OVER) {
-		showGameOver();
+		showGameOver(game);
 		SDL_RenderPresent(renderer);
 		return SDL_APP_CONTINUE;
 	}
@@ -205,7 +241,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		update_player_vertices(game);
 	}
 
-	SDL_RenderDebugTextFormat(renderer, 20, 20, "Level: %d", game->level);
+	showScoreboard(game);
 
 	/* Draw player */
 	if (!SDL_RenderGeometry(renderer, NULL, player->vertices, 4, player->indices, 6)) {
@@ -244,6 +280,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 	Game* game = appstate;
 	if (game)
 		game_free(game);
+	TTF_Quit();
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
@@ -326,17 +363,136 @@ void drawcircle(SDL_Renderer* renderer, int x0, int y0, int radius)
 /**
  *
  */
-void showMenu()
+void showMenu(Game* game)
 {
-	SDL_RenderDebugText(renderer, (float)WIDTH * 0.8f, (float)HEIGHT / 2, "Menu");
-	SDL_RenderDebugText(renderer, (float)WIDTH / 2, (float)HEIGHT / 2, "Press any key");
+	if (!game)
+		return;
+
+	if (text_info.texture1 && text_info.state == LOAD_MENU) {
+		SDL_RenderTexture(renderer, text_info.texture1, NULL, &text_info.rect1);
+		SDL_RenderTexture(renderer, text_info.texture2, NULL, &text_info.rect2);
+		return;
+	}
+
+	if (text_info.texture1) {
+		SDL_DestroyTexture(text_info.texture1);
+		SDL_DestroyTexture(text_info.texture2);
+		text_info.texture1 = NULL;
+		text_info.texture2 = NULL;
+	}
+
+	text_info.state = LOAD_MENU;
+
+	SDL_Surface* text
+	  = TTF_RenderText_Solid(text_info.font, "Asteroids", 9, (SDL_Color){ 255, 255, 255, 255 });
+	if (!text)
+		return;
+
+	text_info.texture1 = SDL_CreateTextureFromSurface(renderer, text);
+	text_info.rect1.x = ((float)game->width - text->w) / 2;
+	text_info.rect1.y = (float)game->height / 3;
+	text_info.rect1.w = text->w;
+	text_info.rect1.h = text->h;
+	SDL_DestroySurface(text);
+
+	text = TTF_RenderText_Solid(text_info.font, "Click any key to start", 23,
+								(SDL_Color){ 255, 255, 255, 255 });
+	if (!text)
+		return;
+
+	text_info.texture2 = SDL_CreateTextureFromSurface(renderer, text);
+	text_info.rect2.x = ((float)game->width - (float)text->w / 2) / 2;
+	text_info.rect2.y = (float)game->height / 2;
+	text_info.rect2.w = (float)text->w / 2;
+	text_info.rect2.h = (float)text->h / 2;
+	SDL_DestroySurface(text);
+
+	SDL_RenderTexture(renderer, text_info.texture1, NULL, &text_info.rect1);
+	SDL_RenderTexture(renderer, text_info.texture2, NULL, &text_info.rect2);
 }
 
 /**
  *
  */
-void showGameOver()
+void showGameOver(Game* game)
 {
-	SDL_RenderDebugText(renderer, (float)WIDTH * 0.8f, (float)HEIGHT / 2, "Game Over");
-	SDL_RenderDebugText(renderer, (float)WIDTH / 2, (float)HEIGHT / 2, "Press any key");
+	if (!game)
+		return;
+
+	if (text_info.texture1 && text_info.state == LOAD_GAME_OVER) {
+		SDL_RenderTexture(renderer, text_info.texture1, NULL, &text_info.rect1);
+		SDL_RenderTexture(renderer, text_info.texture2, NULL, &text_info.rect2);
+		return;
+	}
+
+	if (text_info.texture1) {
+		SDL_DestroyTexture(text_info.texture1);
+		SDL_DestroyTexture(text_info.texture2);
+		text_info.texture1 = NULL;
+		text_info.texture2 = NULL;
+	}
+
+	text_info.state = LOAD_GAME_OVER;
+
+	SDL_Surface* text
+	  = TTF_RenderText_Solid(text_info.font, "Game Over", 9, (SDL_Color){ 255, 255, 255, 255 });
+	if (!text)
+		return;
+
+	text_info.texture1 = SDL_CreateTextureFromSurface(renderer, text);
+	text_info.rect1.x = ((float)game->width - text->w) / 2;
+	text_info.rect1.y = (float)game->height / 3;
+	text_info.rect1.w = text->w;
+	text_info.rect1.h = text->h;
+	SDL_DestroySurface(text);
+
+	text = TTF_RenderText_Solid(text_info.font, "Click any key to restart", 25,
+								(SDL_Color){ 255, 255, 255, 255 });
+	if (!text)
+		return;
+
+	text_info.texture2 = SDL_CreateTextureFromSurface(renderer, text);
+	text_info.rect2.x = ((float)game->width - (float)text->w / 2) / 2;
+	text_info.rect2.y = (float)game->height / 2;
+	text_info.rect2.w = text->w >> 1;
+	text_info.rect2.h = text->h >> 1;
+	SDL_DestroySurface(text);
+
+	SDL_RenderTexture(renderer, text_info.texture1, NULL, &text_info.rect1);
+	SDL_RenderTexture(renderer, text_info.texture2, NULL, &text_info.rect2);
+}
+
+void showScoreboard(Game* game)
+{
+	char level[11];
+	SDL_Color color;
+	
+	if (!game)
+		return;
+
+	if (text_info.texture1 && text_info.state == LEVEL) {
+		SDL_DestroyTexture(text_info.texture1);
+		SDL_DestroyTexture(text_info.texture2);
+		text_info.texture1 = NULL;
+		text_info.texture2 = NULL;
+	}
+
+	text_info.state = LEVEL;
+
+	sprintf(level, "Level: %d", game->level);
+
+	color = (game->state == PAUSE) ? (SDL_Color){ 177, 177, 177, 255 } : (SDL_Color){ 255, 255, 255, 255 };
+	SDL_Surface* text = TTF_RenderText_Solid(text_info.font, level, strlen(level), color);
+											 
+	if (!text)
+		return;
+
+	text_info.texture1 = SDL_CreateTextureFromSurface(renderer, text);
+	text_info.rect1.x = 10;
+	text_info.rect1.y = 10;
+	text_info.rect1.w = text->w >> 2;
+	text_info.rect1.h = text->h >> 2;
+	SDL_DestroySurface(text);
+
+	SDL_RenderTexture(renderer, text_info.texture1, NULL, &text_info.rect1);
 }
