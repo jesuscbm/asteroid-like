@@ -234,17 +234,16 @@ void update_asteroids_position(Game *game)
 		}
 		if (asteroid->x <= asteroid->radius) {
 			asteroid->dx = -asteroid->dx;
-            asteroid->x = asteroid->radius + GRACE_SPACING;
-
+			asteroid->x = asteroid->radius + GRACE_SPACING;
 		}
-        if (asteroid->y >= game->height - asteroid->radius) {
-            asteroid->dy = -asteroid->dy;
-            asteroid->y = game->height - asteroid->radius - GRACE_SPACING;
-        }
-        if (asteroid->y <= asteroid->radius) {
-            asteroid->dy = -asteroid->dy;
-            asteroid->y = asteroid->radius + GRACE_SPACING;
-        }
+		if (asteroid->y >= game->height - asteroid->radius) {
+			asteroid->dy = -asteroid->dy;
+			asteroid->y = game->height - asteroid->radius - GRACE_SPACING;
+		}
+		if (asteroid->y <= asteroid->radius) {
+			asteroid->dy = -asteroid->dy;
+			asteroid->y = asteroid->radius + GRACE_SPACING;
+		}
 	}
 }
 
@@ -273,10 +272,34 @@ void handle_collisions(Game *game)
 			float dist_sq = dx * dx + dy * dy;
 			float radius_sum = asteroid->radius + BULLET_RADIUS;
 			if (dist_sq <= radius_sum * radius_sum) {
-				game->asteroids[i] = game->asteroids[--game->n_asteroids];
 				game->bullets[j] = game->bullets[--game->n_bullets];
-				i--;
 				j--;
+
+				if (asteroid->radius < ASTEROID_SPLIT_THRESHOLD) {
+					game->asteroids[i--] = game->asteroids[--game->n_asteroids];
+					continue;
+				}
+				float vx = asteroid->dx;
+				float vy = asteroid->dy;
+				float module = SDL_sqrtf(vx * vx + vy * vy);
+				float nx = vx / module;
+				float ny = vy / module;
+
+#define sqrt2 1.41421356237f
+
+				game->asteroids[game->n_asteroids++] = game->asteroids[i + 1];
+				game->asteroids[i + 1] = (Asteroid){ .radius = asteroid->radius / 2.0f,
+													 .x = asteroid->x + nx * asteroid->radius/sqrt2,
+													 .y = asteroid->y - ny * asteroid->radius/sqrt2,
+													 .dx = asteroid->dx + vy,
+													 .dy = asteroid->dy - vx };
+				game->asteroids[i] = (Asteroid){ .radius = asteroid->radius / 2.0f,
+												 .x = asteroid->x - nx * asteroid->radius/sqrt2,
+												 .y = asteroid->y + ny * asteroid->radius/sqrt2,
+												 .dx = asteroid->dx - vy,
+												 .dy = asteroid->dy + vx };
+
+				i++;
 			}
 		}
 	}
@@ -321,10 +344,14 @@ void handle_collisions(Game *game)
 
 				// Now that we have the speed impulse (impulse = speed because they are perfectly
 				// elastic), we apply it to the asteroids
-				a1->dx += nx * impact_speed;
-				a1->dy += ny * impact_speed;
-				a2->dx -= nx * impact_speed;
-				a2->dy -= ny * impact_speed;
+
+				// Ponderate the impulse by mass
+				float ponderation
+				  = a1->radius * a1->radius / (a1->radius * a1->radius + a2->radius * a2->radius);
+				a1->dx += nx * 2 * impact_speed * (1.0f - ponderation);
+				a1->dy += ny * 2 * impact_speed * (1.0f - ponderation);
+				a2->dx -= nx * 2 * impact_speed * ponderation;
+				a2->dy -= ny * 2 * impact_speed * ponderation;
 			}
 		}
 	}
@@ -332,7 +359,9 @@ void handle_collisions(Game *game)
 
 void create_asteroids(Game *game)
 {
-	int n_asteroids = (game->level >= MAX_ASTEROIDS) ? MAX_ASTEROIDS : (game->level);
+	int n_asteroids = (game->level + MIN_ASTEROIDS >= MAX_ASTEROIDS)
+						? MAX_ASTEROIDS
+						: (game->level + MIN_ASTEROIDS);
 	for (int i = 0; i < n_asteroids; i++) {
 		Asteroid *asteroid = &game->asteroids[game->n_asteroids++];
 		asteroid->radius

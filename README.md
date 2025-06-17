@@ -24,7 +24,6 @@ is necessary for the changes to take effect.
 ## TODO
 
 - Document
-- Split asteroids
 - Add sound
 - Other TODOs scattered around the code
 - SDL3_image

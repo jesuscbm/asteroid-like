@@ -26,7 +26,6 @@ typedef struct Asteroid {
 	float x, y;
 	float radius;
 	float dx, dy;
-	float velocity;
 } Asteroid;
 
 typedef struct Bullet {
