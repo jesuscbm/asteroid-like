@@ -1,5 +1,11 @@
 # Asteroids-like game
 
+
+
+https://github.com/user-attachments/assets/d82d854a-6273-4c1a-8c61-005aa7ddc4fc
+
+
+
 Asteroids-like game written in C using the [SDL3](https://www.libsdl.org/)
 library, and nothing more. Meant as a learning project for SDL3 and graphics in
 general.
