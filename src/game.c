@@ -10,15 +10,39 @@
 
 #define GRACE_SPACING 5
 
+/**
+ * Updates the position of the player in the game.
+ *
+ * @param game The game to update
+ */
 void update_player_position(Game *game);
 
 /**
+ * Updates the position of the bullets in the game.
+ *
  * Bullets HAVE TO GO before asteroids.
+ *
+ * @param game The game to update
  */
 void update_bullets_position(Game *game);
+/**
+ * Updates the position of the asteroids in the game.
+ * 
+ * @param game The game to update
+ */
 void update_asteroids_position(Game *game);
+/**
+ * Handles player-asteroid, bullet-asteroid, and asteroid-asteroid collisions. In that order
+ * 
+ * @param game The game to update
+ */ 
 void handle_collisions(Game *game);
 
+/**
+ * Creates the asteroids corresponding to the current level
+ * 
+ * @param game The game to update
+ */
 void create_asteroids(Game *game);
 
 bool game_init(Game **game)
@@ -112,7 +136,6 @@ bool game_shoot(Game *game)
 	game->bullets[game->n_bullets++]
 	  = (Bullet){ .dx = SDL_sin(player->direction * SDL_PI_D / 180.0) * BULLET_VELOCITY,
 				  .dy = -SDL_cos(player->direction * SDL_PI_D / 180.0) * BULLET_VELOCITY,
-				  .direction = player->direction,
 				  .x = player->x,
 				  .y = player->y };
 
@@ -249,11 +272,6 @@ void update_asteroids_position(Game *game)
 
 void handle_collisions(Game *game)
 {
-	/* Collisions. TODO: Consider dividing the list in bins for better performance
-	 * Consider quad trees
-	 * Damn collisions are hard
-	 */
-
 	// Asteroid-Player and Bullet-Asteroid collisions
 	for (int i = 0; i < game->n_asteroids; i++) {
 		Asteroid *asteroid = &game->asteroids[i];
@@ -288,16 +306,17 @@ void handle_collisions(Game *game)
 #define sqrt2 1.41421356237f
 
 				game->asteroids[game->n_asteroids++] = game->asteroids[i + 1];
-				game->asteroids[i + 1] = (Asteroid){ .radius = asteroid->radius / 2.0f,
-													 .x = asteroid->x + nx * asteroid->radius/sqrt2,
-													 .y = asteroid->y - ny * asteroid->radius/sqrt2,
-													 .dx = asteroid->dx + vy,
-													 .dy = asteroid->dy - vx };
-				game->asteroids[i] = (Asteroid){ .radius = asteroid->radius / 2.0f,
-												 .x = asteroid->x - nx * asteroid->radius/sqrt2,
-												 .y = asteroid->y + ny * asteroid->radius/sqrt2,
-												 .dx = asteroid->dx - vy,
-												 .dy = asteroid->dy + vx };
+				game->asteroids[i + 1]
+				  = (Asteroid){ .radius = asteroid->radius / sqrt2,
+								.x = asteroid->x + ny * asteroid->radius / sqrt2,
+								.y = asteroid->y - nx * asteroid->radius / sqrt2,
+								.dx = asteroid->dx + ny,
+								.dy = asteroid->dy - nx };
+				game->asteroids[i] = (Asteroid){ .radius = asteroid->radius / sqrt2,
+												 .x = asteroid->x - ny * asteroid->radius,
+												 .y = asteroid->y + nx * asteroid->radius,
+												 .dx = asteroid->dx - ny,
+												 .dy = asteroid->dy + nx };
 
 				i++;
 			}

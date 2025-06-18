@@ -14,7 +14,6 @@
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_surface.h>
 #include <SDL3/SDL_video.h>
-#include <SDL3_image/SDL_image.h>  // TODO: Use SDL3_image
 #include <SDL3_ttf/SDL_ttf.h>
 
 #define SDL_MAIN_USE_CALLBACKS 1 /* No need for main() */
@@ -23,12 +22,28 @@
 #include "config.h"
 #include "game.h"
 
+/**
+ * Updates the vertices of the player.
+ */
 void update_player_vertices(Game* game);
+/**
+ * Draws a circle using the midpoint circle algorithm.
+ */
 void drawcircle(SDL_Renderer* renderer, int x0, int y0, int radius);
 
+/**
+ * Indicates the ms that each frame has to last
+ */
 const int frameDelay = 1000 / FPS;	// ms per frame
-Uint64 frame_start = 0;				// ms at start of frame
-int frame_time = 0;					// ms elapsed this frame
+/**
+ * Indicates the ms at the start of the current frame
+ */
+Uint64 frame_start = 0;	 // ms at start of frame
+/**
+ * Indicates the ms elapsed to process this frame. If this is smaller than frameDelay, we have to
+ * delay.
+ */
+int frame_time = 0;	 // ms elapsed this frame
 
 /**
  * @brief Window for the application
@@ -45,17 +60,39 @@ static SDL_Renderer* renderer;
  */
 static SDL_AudioStream* stream = NULL;
 
-// TODO: New file for font-related stuff?
+/**
+ * All infomration needed to render the font
+ */
 static struct {
-	enum { NOTHING, LEVEL, LOAD_MENU, LOAD_GAME_OVER } state;
-	TTF_Font* font;
-	SDL_Texture* texture1;
-	SDL_Texture* texture2;
-	SDL_FRect rect1, rect2;
+	enum {
+		NOTHING,
+		LEVEL,
+		LOAD_MENU,
+		LOAD_GAME_OVER
+	} state;			   /**< Indicates which render info is currently loaded */
+	TTF_Font* font;		   /**< Font to use */
+	SDL_Texture* texture1; /**< First loaded texture */
+	SDL_Texture* texture2; /**< Second loaded texture */
+	SDL_FRect rect1;	   /**< Rectangle to contain the first texture */
+	SDL_FRect rect2;	   /**< Rectangle to contain the second texture */
 } text_info = { NOTHING, NULL, NULL };
 
+/**
+ * @brief Shows the start menu
+ * @param game Game state
+ */
 void showMenu(Game* game);
+
+/**
+ * @brief Shows the game over screen
+ * @param game Game state
+ */
 void showGameOver(Game* game);
+
+/**
+ * @brief Shows the "level: X" text
+ * @param game Game state
+ */
 void showScoreboard(Game* game);
 
 /**
@@ -466,7 +503,7 @@ void showScoreboard(Game* game)
 {
 	char level[11];
 	SDL_Color color;
-	
+
 	if (!game)
 		return;
 
@@ -481,9 +518,10 @@ void showScoreboard(Game* game)
 
 	sprintf(level, "Level: %d", game->level);
 
-	color = (game->state == PAUSE) ? (SDL_Color){ 177, 177, 177, 255 } : (SDL_Color){ 255, 255, 255, 255 };
+	color = (game->state == PAUSE) ? (SDL_Color){ 177, 177, 177, 255 }
+								   : (SDL_Color){ 255, 255, 255, 255 };
 	SDL_Surface* text = TTF_RenderText_Solid(text_info.font, level, strlen(level), color);
-											 
+
 	if (!text)
 		return;
 

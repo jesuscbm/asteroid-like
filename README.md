@@ -21,9 +21,7 @@ is necessary for the changes to take effect.
 - <kbd>Space</kbd>: Fire
 - <kbd>Q</kbd>: Quit
 
-## TODO
+## Possible upgrades
 
-- Document
 - Add sound
-- Other TODOs scattered around the code
-- SDL3_image
+- SDL3_image for better graphics
